@@ -49,7 +49,7 @@ graph.plot_frozenset_bars_labeled(l2)
 # graph.evaluate_prescription_strategy(f, X_train, y_train, X_pres, y_pres,1,cost = list(range(0, 3000, 250)))
 
 # Heatmap for k = 1 
-# graph.heat_map_graph(X_train,X_pres,list(range(0, 12501, 250)), f, [1,2,3,4,5,6,7,8,9,10], graph.heat_map_values,1, annotate= True, universal = False)
+graph.heat_map_graph(X_train,X_pres,list(range(0, 12501, 250)), f, [1,2,3,4,5,6,7,8,9,10], graph.heat_map_values,1, annotate= True, universal = False)
 
 # Prescription resolution for k = 1, retaining only those modality combinations 
 # whose cumulative importance accounts for at least 75% of the total
@@ -59,3 +59,6 @@ graph.evaluate_prescription_strategy(f, X_train, y_train, X_pres, y_pres,1,ncomb
 graph.evaluate_prescription_strategy(f, X_train, y_train, X_pres, y_pres,5,ncomb = 0.75, cost = list(range(0, 3000, 250)),xlim=(-20,2700), ylim=(150,470))
 graph.evaluate_prescription_strategy(f, X_train, y_train, X_pres, y_pres,10,ncomb = 0.75, cost = list(range(0, 3000, 250)),xlim=(-20,2700), ylim=(150,470))
 graph.evaluate_prescription_strategy_universal(f, X_train, y_train, X_pres, y_pres, cost = list(range(0, 3000, 250)), xlim=(-20,2700), ylim=(150,470))
+
+# Prescription for k = 1000 with regularization on the selection of modalities
+graph.regularized_evaluate_prescription_strategy(f, X_train, y_train, X_pres, y_pres,1000,nreg = 5,ncomb=0.75, cost=range(0, 3000, 250), xlim=None, ylim=None)
