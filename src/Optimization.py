@@ -1,25 +1,40 @@
 import gurobipy as gp
 from gurobipy import GRB
 
-def _BMOptimization(error_matrix, costs_v, costs_f, budget, cat, cat_combination):
+def _BMOptimization(error_matrix, costs_v, costs_f, budget, mod, mod_combination):
+    """
+    Function to solve the selection of modalities. 
+    Parameters:
+        - error_matrix: matrix with estimation for prediction errors
+        - costs_v : variable cost for each Supplementeary Modality
+        - cost_f : fixed cost for each Supplementary Modality
+        - budget : Maximum budget allowed
+        - mod: set of Supplementary Modalities
+        - mod_combination: combination of Supplementary Modalities to be considered
+    
+    Returns:
+        - Selection of Modalities for each individual
+        - Total budget spent
+        - Total real error
+    """
     
     m = gp.Model('gol')
     nr, nc = error_matrix.shape
-    ncat = len(cat)
+    nmod = len(mod)
     pi = {}
     pi= m.addVars(nr, nc, vtype=GRB.BINARY, name='pi')
     
     
-    Gamma = m.addVars(range(ncat), vtype=GRB.BINARY, name='Gamma')
+    Gamma = m.addVars(range(nmod), vtype=GRB.BINARY, name='Gamma')
     
     for i in range(nr):  
         m.addConstr(gp.quicksum(pi[i, j] for j in range(nc)) == 1, name=f"sum_pi_col_{i}")
         
-    m.addConstr(gp.quicksum(costs_v[j] * pi[i, j] for i in range(nr) for j in range(nc)) + gp.quicksum(Gamma[j] * costs_f[j] for j in range(ncat)) <= budget, name="sum_Budget_total")        
+    m.addConstr(gp.quicksum(costs_v[j] * pi[i, j] for i in range(nr) for j in range(nc)) + gp.quicksum(Gamma[j] * costs_f[j] for j in range(nmod)) <= budget, name="sum_Budget_total")        
     
-    for k in range(ncat):
+    for k in range(nmod):
         for j in range(nc):
-            if cat[k] in cat_combination[j]:
+            if mod[k] in mod_combination[j]:
                 for i in range(nr):
                     m.addConstr(pi[i,j] <= Gamma[k], name="Fixed_costs")
     
@@ -37,7 +52,7 @@ def _BMOptimization(error_matrix, costs_v, costs_f, budget, cat, cat_combination
 
         total_cost = (
         sum(costs_v[j] * pi[i, j].X for i in range(nr) for j in range(nc))+
-        sum(Gamma[j].X * costs_f[j] for j in range(ncat))        
+        sum(Gamma[j].X * costs_f[j] for j in range(nmod))        
     )
         total_error = m.ObjVal
 

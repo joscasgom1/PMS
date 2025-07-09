@@ -5,6 +5,7 @@
 ### Classic and Modality Combination Importance
 import numpy as np
 import matplotlib.pyplot as plt
+import random 
 
 def plot_feature_importances(importances, feature_names=None, title=""):
     """
@@ -180,53 +181,9 @@ Returns:
         count = {k: v / n_feats for k, v in count.items()}
         return count, rf.total_cost
     
-    
-
-def indices_repetidas_con_condicion_total(arr, cond, precision=6):
-    from collections import defaultdict
-
-    grupos = defaultdict(list)
-    for idx, fila in enumerate(arr):
-        fila_str = ",".join(f"{x:.{precision}f}" for x in fila)
-        grupos[fila_str].append(idx)
-
-    resultado = []
-    for indices in grupos.values():
-        conds = {cond[i] for i in indices}
-        if len(conds) > 1:
-            resultado.append(indices)
-    return resultado
 
 
-import random
 
-def permutar_aleatorio_por_grupos(base_list, grupos, n):
-    """
-    Generates n random permutations of base_list respecting the exchange groups.
-    
-    Parameters:
-        base_list (list): Base list to permute.
-        groups (list[list[int]]): Indices that can be swapped among themselves.
-        n (int): Number of random permutations to generate.
-    
-    Returns:
-        list[list]: List of valid random permutations.
-    """
-    permutaciones = set()
-    intentos = 0
-    max_intentos = n * 10  # para evitar bucles infinitos si hay pocas permutaciones posibles
-
-    while len(permutaciones) < n and intentos < max_intentos:
-        copia = base_list[:]
-        for grupo in grupos:
-            valores = [base_list[i] for i in grupo]
-            random.shuffle(valores)
-            for idx, i in enumerate(grupo):
-                copia[i] = valores[idx]
-        permutaciones.add(tuple(copia))
-        intentos += 1
-
-    return [list(p) for p in permutaciones]
 
 
 def plot_frozenset_bars_labeled(data, title=""):
@@ -653,3 +610,138 @@ def evaluate_prescription_strategy_classification_het(relevant_features, mean, c
 
     plt.tight_layout()
     plt.show()
+    
+def repeated_indices_with_condition(arr, cond, precision=6):
+    """
+    Identifies groups of repeated rows in 'arr' (up to given precision) 
+    where the associated 'cond' values are not all the same.
+
+    Parameters:
+        arr (Iterable of iterables): Array-like structure where each element is a row.
+        cond (Iterable): Condition values associated with each row in 'arr'.
+        precision (int): Number of decimal places to consider when comparing rows.
+
+    Returns:
+        List[List[int]]: A list of lists, where each sublist contains the indices
+                         of identical rows with differing 'cond' values.
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    for idx, row in enumerate(arr):
+        row_str = ",".join(f"{x:.{precision}f}" for x in row)
+        groups[row_str].append(idx)
+
+    result = []
+    for indices in groups.values():
+        unique_conds = {cond[i] for i in indices}
+        if len(unique_conds) > 1:
+            result.append(indices)
+
+    return result
+
+def random_permutations_by_groups(base_list, groups, n):
+    """
+    Generates n random permutations of base_list, allowing swaps only within defined groups.
+    
+    Parameters:
+        base_list (list): The original list to permute.
+        groups (list[list[int]]): Each sublist contains indices that can be permuted among themselves.
+        n (int): Number of random permutations to generate.
+    
+    Returns:
+        list[list]: A list of valid random permutations.
+    """
+    import random
+    permutations = set()
+    attempts = 0
+    max_attempts = n * 10  # prevents infinite loops if there are few valid permutations
+
+    while len(permutations) < n and attempts < max_attempts:
+        copy = base_list[:]
+        for group in groups:
+            values = [base_list[i] for i in group]
+            random.shuffle(values)
+            for idx, i in enumerate(group):
+                copy[i] = values[idx]
+        permutations.add(tuple(copy))
+        attempts += 1
+
+    return [list(p) for p in permutations]
+
+
+def regularized_evaluate_prescription_strategy(f, X, y, X2, y2,k,nreg = 1,ncomb=1, cost=range(0, 600, 50), xlim=None, ylim=None):
+    """
+    Runs the full prescription evaluation pipeline:
+    - Precomputes OOB info
+    - Estimates error
+    - Performs modality selection
+    - Average across different possible selections
+    - Compares estimated vs. real error
+    - Plots results
+    
+    Args:
+        f: Customized Random Forest
+        X, y: training data
+        X2, y2: Prescriptive data
+        k: number of neighbors used to estimate the prediction error
+        costs: Allowed budget values for which the prescription problem is solved
+        xlim: tuple (xmin, xmax) for x-axis limits
+        ylim: tuple (ymin, ymax) for y-axis limits
+        ncomb: fraction indicating the threshold for importance in the modality combinations considered during prescription.
+        nreg: number of possible selections to average
+    """
+
+    f._precompute_oob_mapping()
+    f.error_estimation_oob(X, y, ncomb)
+    f._error_estimation_RFbased(X, X2, k)
+    f.cat_comb_importance()
+    error_estimate = f.error_estimation_test
+    real_cost = []
+    error = []
+    real_error = []
+    
+
+    for c in cost:
+        f.BMOptimization(c)
+        
+        r = []
+        perm = random_permutations_by_groups(f.feature_selection,repeated_indices_with_condition(error_estimate, f.feature_selection), nreg)
+        for p in perm:
+            Xc = X2[p].copy()
+            yc = y2[p].copy()
+            r.append(f.actualError(Xc, yc))
+               
+        real_cost.append(f.total_cost)
+        error.append(f.total_error)
+        real_error.append(f.actualError(X2, y2))
+
+    ref_error = np.sum(np.abs(y2 - f.predictRF(X2)))
+
+    # Plotting
+    plt.figure(figsize=(8, 5))
+    plt.scatter(real_cost, error, color='blue', label='Estimated error')
+    plt.plot(real_cost, error, linestyle='--', color='gray', alpha=0.5)
+    plt.scatter(real_cost, real_error, color='red', label='Real error')
+    plt.plot(real_cost, real_error, linestyle='--', color='red', alpha=0.5)
+    plt.axhline(y=ref_error, linestyle='--', color='green', alpha=0.7)
+
+    plt.xlabel('Budget spent')
+    plt.ylabel('Error')
+    plt.legend()
+    plt.grid(True)
+
+    if xlim:
+        plt.xlim(xlim)
+        ticks = plt.xticks()[0]
+        plt.xticks([tick for tick in ticks if tick >= 0])
+    if ylim:
+        plt.ylim(ylim)
+
+    plt.show()
+
+    return {
+        'cost': real_cost,
+        'estimated_error': error,
+        'real_error': real_error
+    }

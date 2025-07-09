@@ -40,7 +40,9 @@ class BMRandomForest:
         self.random_state = random_state
         
     def _bagging(self,X,y,n,cat):
-
+        """
+        Random selection of a bootstrap sample to train each tree
+        """
         ind_bootstrap = np.random.choice(n, size=n, replace=self.replacement)
         Xbs = X[ind_bootstrap, :].astype(np.float32, copy=True)
               
@@ -95,6 +97,9 @@ class BMRandomForest:
         return stats.mode(preds)[0] if self.tree == 'cls' else np.mean(preds)
 
     def predictRF(self,X):
+        """
+        Prediction for an individual
+        """
         return np.array([self._predictRF(x) for x in X])
 
     def _predict_oob(self,x,i):
@@ -111,6 +116,9 @@ class BMRandomForest:
         
     
     def predict_OOB(self,X):
+        """
+        Out-Of-Bag prediction for each individual in the training set
+        """
         nr = X.shape[0]
         return np.array([self._predict_oob(X[i],i) for i in range(nr)])
 
@@ -133,6 +141,14 @@ class BMRandomForest:
     
     
     def error_estimation_oob(self, X, y, ncomb = 1):
+        """
+        OOB prediction error for each individual in the training set
+        Parameters:
+            - X: features of training individuals
+            - y: response value of training individuals
+            - ncomb: fraction that limits the number of combination of modalities
+                     considered by means of the cummulative importance of modality combinations
+        """
         self.cat_combination, self.feat_comb = self.cat_selection(ncomb)
         tf = set(chain.from_iterable([t.features for t in self.modalities]))
         self.null_feat = [list(tf - set(subset)) for subset in self.feat_comb]
@@ -151,13 +167,18 @@ class BMRandomForest:
         self.BM_train_error = error_comb
         
     def _error_estimation_test(self,X_train,X_test):
+       """
+       Estimation for individual in the prescriptive set by means of euclidean distance 
+       """ 
        dist_matrix = np.linalg.norm(X_train[None, :, self.ch_feat] - X_test[:, None, self.ch_feat], axis=2)  
        self.error_estimation_test = self.BM_train_error[np.argmin(dist_matrix, axis=1)]
        
     def BMOptimization(self,Budget):
         """
-        After fitting a customized Random Forest and with the errors estimation, providing a budget value
-        the selection of modalities is solved by means of an IP
+        Resolution of the selection of modalities.
+        
+        Parameters:
+            - Budget: Maximum budget available
         """
         CV = [sum(c.CV for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
         self.Cost_V = CV
@@ -167,8 +188,10 @@ class BMRandomForest:
    
     def BMOptimization_universal(self,Budget,n):
         """
-        After fitting a customized Random Forest and with the errors estimation, providing a budget value
-        the selection of modalities is solved by means of an IP for the Universal Prescription
+        Resolution of the selection of modalities for the Universal Prescription
+        
+        Parameters:
+            - Budget: Maximum budget available
         """
         CV = [sum(c.CV for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
         CF = [sum(c.CF for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
@@ -180,12 +203,18 @@ class BMRandomForest:
     
     
     def FeatureSelecion(self,X_train,X_test,y_train,B):
+        """
+        Auxiliar function to perform the prescription directly
+        """
         self.fit_RF(X_train,y_train)
         self.error_estimation_oob(X_train,y_train)
         self._error_estimation_RFbased(X_train,X_test,1)
         self.BMOptimization(B)
         
     def actualError(self,X,y):
+        """
+        Calculation of the prediction error
+        """
         Xc = X.copy()
         for i, feat_idx in enumerate(self.feature_selection):
             Xc[i, self.null_feat[feat_idx]] = np.nan
@@ -193,6 +222,9 @@ class BMRandomForest:
         return np.mean(yp==y) if self.tree == 'cls' else np.sum(np.abs(yp-y))
     
     def _terminal_leaf_OOB(self, X):
+        """
+        Lists of terminal nodes across the trees taking into account only the Baseline Modality and OOB trees
+        """
         X = X.copy()  
         X[:, list(self.total_exp_features)] = np.nan  
     
@@ -208,6 +240,9 @@ class BMRandomForest:
     
     
     def _terminal_leaf_test(self, X):
+        """
+        Lists of terminal nodes across the trees taking into account only the Baseline Modality for individuals in Prescriptive Set
+        """
         X = X.copy()  
         X[:, list(self.total_exp_features)] = np.nan  
         hojas_test = {}  
@@ -220,6 +255,10 @@ class BMRandomForest:
         return hojas_test
     
     def comparar_hojas(self, hojas_OOB, hojas_test, k):
+        """
+        Comparison of terminal nodes for individuals in the training set and in the prescriptive set,
+        in order to measure the proximity between them
+        """
         coincidencias = {}    
         hojas_OOB_sets = {
             idx_muestra: set((idx_arbol, hoja_terminal) for idx_arbol, hoja_terminal in hojas.items())
@@ -247,6 +286,10 @@ class BMRandomForest:
     
 
     def _error_estimation_RFbased(self, X_train, X_test, k):
+        """
+        Estimation of prediction errors for individuals in the prescriptive set according to the
+        proximity measure provided by the Random Forest
+        """
         matches = self.comparar_hojas(self._terminal_leaf_OOB(X_train), self._terminal_leaf_test(X_test), k)
     
         error_estimation = np.zeros((len(X_test), self.BM_train_error.shape[1]))  
@@ -263,6 +306,9 @@ class BMRandomForest:
         self.error_estimation_test = error_estimation
         
     def prob_class_predict(self,X,y):
+        """
+        Estimates the probability that an individual belongs to a given class in a classification setting
+        """
         Xc = X.copy()
         for i, feat_idx in enumerate(self.feature_selection):
             Xc[i, self.null_feat[feat_idx]] = np.nan
@@ -271,6 +317,9 @@ class BMRandomForest:
 
     
     def var_importance(self):
+        """
+        Classic measure for the importance of each variable in the Random Forest
+        """
         importancia = {}
         
         def recorrer_nodos(nodo):

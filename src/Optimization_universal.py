@@ -2,7 +2,22 @@ import gurobipy as gp
 from gurobipy import GRB
 
 def _BMOptimization_universal(error_universal, costs_v, costs_f, budget, cat, cat_combination,n):
+    """
+    Function to solve the selection of modalities. 
+    Parameters:
+        - error_universal: matrix with estimation for prediction errors
+        - budget : Maximum budget allowed
+        - costs_v : variable cost for each Supplementeary Modality
+        - cost_f : fixed cost for each Supplementary Modality
+        - mod: set of Supplementary Modalities
+        - mod_combination: combination of Supplementary Modalities to be considered
+        - n: size of prescriptive set
     
+    Returns:
+        - Selection of Modalities for each individual
+        - Total budget spent
+        - Total real error
+    """
     m = gp.Model('gol')
     nc = len(error_universal)
     ncat = len(cat)

@@ -38,6 +38,13 @@ class BM_Tree:
         
         
     def fit(self, features, target):
+        """
+        Fit each tree with Preliminary splits
+
+        Parameters:
+            - features : 2 dimensional-array of features
+            - target : 1 dimensional-array of variable response
+        """
         feature_counts = Counter(f for cat in self.modalities for f in cat.features)
         if any(count > 1 for count in feature_counts.values()):
             raise ValueError("Not excluding modalities")
@@ -54,6 +61,10 @@ class BM_Tree:
         self.root._grow_tree(features, target, self.criterion)
         
     def _feature_selection(self,f):
+        """
+        Auxiliar function to identify whether a modality is Optional at each
+        node or not
+        """
         m = {}
         for t in self.modalities:
             for n in t.features:
@@ -62,7 +73,15 @@ class BM_Tree:
     
     
     def _grow_tree(self, features, target, criterion):
-        
+        """
+        Function to grow each tree
+
+       Parameters:
+           - features : 2 dimensional-array of features
+           - target : 1 dimensional-array of variable response
+           - criterion: impurity criterion considered at each node
+
+        """
         self.n_samples = len(target)
         if len(np.unique(target)) == 1:
             self.label = target[0]
@@ -92,6 +111,14 @@ class BM_Tree:
         self._split_tree(features, target, criterion)
         
     def _calc_impurity(self, criterion, target):
+        """
+        Calculation of impurity at each node
+
+        Parameters
+            - criterion: impurity criterion considered at each node
+            - target : variable response for which impurity is calculated
+
+        """
         if len(target) == 0:
             return 0
         
@@ -109,11 +136,23 @@ class BM_Tree:
             return -np.sum(probs * np.log2(probs, where=probs > 0))
     
     def _shuffle_variable(self, n):
-
+        """
+        Random selection of the features to evaluate the split at each noda
+        """
+        
         return random.sample(self.fs, n)
              
     def _cat_split(self, features, target, criterion, impurity_node):
-        
+        """
+        Search for the best split at each nodeand the corresponging impurity reduction
+
+        Parameters:
+            - features: features of individuals at each node
+            - target: response variable for individuals at each node
+            - criterion: impurity criterion considered
+            - impurity_node: impurity of current node
+
+        """
         if not self.fs or len(np.unique(target)) <= 1:
             return 0, None, None, None, None
     
@@ -220,8 +259,19 @@ class BM_Tree:
         return best_gain, best_feature, best_threshold, best_id
 
     def _split_tree(self, features, target, criterion, preliminary=False, id_remove=None):
-        mask = features[:, self.feature] <= self.threshold
-                
+        """
+        Function to perform the split at each node
+
+        Parameters:
+            - features: features of individuals at each node
+            - target: response variable of individuals at each node
+            - criterion: impurity criterion considered
+            - preliminary: Boolean indicating if a preliminary split is to be performed
+            - id_remove: In case a preliminary split is performed, indicates the id of the corresponding Supplementary Modality
+
+        """
+        
+        mask = features[:, self.feature] <= self.threshold         
         features_left = features[mask]
         target_left = target[mask]
         features_right = features[~mask]
@@ -261,7 +311,10 @@ class BM_Tree:
         
         return
 
-    def _create_subtree(self, features, target, criterion):    
+    def _create_subtree(self, features, target, criterion):
+        """
+        Creation of the corresponding trees at each split node
+        """
         side = BM_Tree(tree=self.tree, criterion=self.criterion, max_depth=self.max_depth)
         side.depth = self.depth + 1
         side.fs = self.fs
@@ -272,6 +325,9 @@ class BM_Tree:
         return side
     
     def print_tree(self):
+        """
+        Visual representation of the fitted Tree
+        """
         self.root._show_tree(0, ' ')
     
     def _show_tree(self, depth, cond):
@@ -284,6 +340,10 @@ class BM_Tree:
             print(f"{prefix}{{value: {self.label}, samples: {self.n_samples}}}")
 
     def get_mod_comb(self, terminal_features=None):
+        """
+        Calculation of the combination of Supplementary Modalities that appear during
+        the training
+        """
         if terminal_features is None:
             terminal_features = [] 
         
@@ -299,6 +359,11 @@ class BM_Tree:
         return terminal_features 
     
     def get_mod_comb_g(self, terminal_features=None,gain = 0):
+        """
+        Calculation of the importance reduction corresponding to the path reaching each 
+        terminal leaf along with the combination of Supplementary Modalities used to reach it
+
+        """
         if terminal_features is None:
             terminal_features = [] 
         
@@ -356,6 +421,9 @@ class BM_Tree:
             return self.label
         
     def  _terminal_leaf(self, d, n):
+        """
+        Identification of the terminal leaf in a tree for an individual
+        """
         if self.feature != None:
            if self.sn_split == True:
                if not np.isnan(d[self.feature]):
