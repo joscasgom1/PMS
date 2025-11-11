@@ -53,14 +53,9 @@ These models serve as the predictive base for generating prescriptions.
     conda activate pms_env
     ```
 
-3. Install the required packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+3. Ensure that **Gurobi** is installed and the license is active.
 
-4. Ensure that **Gurobi** is installed and the license is active.
-
-5. Run the experiment scripts:
+4. Run the experiment scripts:
     ```bash
     python experiments_compactRF.py
     python experiments_extendedRF.py
