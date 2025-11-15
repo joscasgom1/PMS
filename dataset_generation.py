@@ -248,8 +248,8 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         y = wine_quality.data.targets.values.ravel()  # Aplanar target
         
         # Convertir a clasificación si es necesario
-        if setting == 'clf':
-            y = (y > 6).astype(int)
+        if setting == 'cls':
+            y = (y > 5).astype(int)
         
         # Dividir en entrenamiento y prescriptivo
         X_train, X_pres, y_train, y_pres = train_test_split(
@@ -361,7 +361,7 @@ presets = {
         "scenarios": {
             "6": {
                 "reg": {"impurity":"mse","tree_depth": 6, "cost": range(0, 4001, 250), "ylim": (150,470)},
-                "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 4001, 250), "ylim": (80,350), "accuracy_lim": (0.45,0.58)}
+                "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 4001, 250), "ylim": (0,220), "accuracy_lim": (0.64,0.77)}
             }
         }
     },
