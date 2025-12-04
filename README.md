@@ -55,12 +55,14 @@ These models serve as the predictive base for generating prescriptions.
 
 3. Ensure that **Gurobi** is installed and the license is active.
 
-4. Run the experiment scripts:
+4. Select the desired datasets and scenarios inside each script  
+   (`experiments_compactRF.py` and `experiments_extendedRF.py`).
+
+5. Run the experiment scripts:
     ```bash
     python experiments_compactRF.py
     python experiments_extendedRF.py
     ```
-
 ---
 
 ## Presets
@@ -78,8 +80,10 @@ These models serve as the predictive base for generating prescriptions.
 
 The experiments generate:
 
-- **Prescription plots**  
-- **Heatmaps comparing local vs global prescriptions**
+- **Prescription results**: Heatmaps comparing local vs. global prescriptions  
+  (file: 'hm_comparison.pdf').
+- **Prediction results**: Summary of prediction metrics  
+  (file: 'prescription.pdf').
 
 ---
 
