@@ -1,13 +1,12 @@
 """
-Main script to perform the prescriptive modality selection using an extended Random Forest (RF) 
-as predictive model. The script performs both the training phase and the prescriptive analysis.
+Main script to compare the time required to fit the extended Random Forest
+using the scikit-learn library on the Wine dataset.
 """
 
-from src.extendedRF import extendedRF                # Extended Random Forest implementation
-import src.graph_crf as graph                        # Graphing and visualization utilities
+from src.extended_scikit import extendedRFscikit             # Extended Random Forest implementation                    # Graphing and visualization utilities
 import time                                          # For measuring computation times
 from dataset_generation import get_dataset, presets  # Dataset generation utilities
-import matplotlib.pyplot as plt                      # Plotting library
+                   
 
 
 
@@ -17,12 +16,10 @@ import matplotlib.pyplot as plt                      # Plotting library
 # ============================================================
 
 # Dataset and scenario selection
-dataset = "wine"  # Dataset identifier (see presets for available options)
-scenario = "6"                       # Scenario ID within the dataset
+dataset = "wine"  
+scenario = "6"
 setting = "cls"                      # Task type: "reg" = regression, "cls" = classification
 
-# Prescription parameters
-k = 1                                 # Number of neighbors used to estimate the individualized prediction error
 
 # ------------------------------------------------------------
 # Load configuration preset from the predefined settings.
@@ -61,13 +58,11 @@ X_train, y_train, X_pres, y_pres, modalities = get_dataset(dataset, scenario, se
 #   random_state     : for reproducibility
 
 
-f = extendedRF(100, X_train.shape[0], modalities, setting, cfg["impurity"], cfg["tree_depth"], random_state=42)
-
-
 # ============================================================
 #                   MODEL TRAINING PHASE
 # ============================================================
 
+f = extendedRFscikit(100, X_train.shape[0], modalities, setting, cfg["impurity"], cfg["tree_depth"], random_state=42)
 t1 = time.time()
 f.fit_RF(X_train, y_train)  # Fit the extended Random Forest
 t2 = time.time()
@@ -75,31 +70,5 @@ T_total = (t2 - t1) / 60
 print('Total time to fit the extended RF:', T_total, 'minutes')
 
 
-# ============================================================
-#                   PRESCRIPTIVE ANALYSIS
-# ============================================================
-# Generate two heatmaps for the selection:
-#   - Local prescription
-#   - Global prescription
-# The heatmaps are saved as 'hm_comparison.pdf'.
-# Optionally, the selection can be segmented for subpopulations.
-# The prediction phase evaluates both local and global prescriptions
-# for regression and classification tasks.
-# The prediction plot is generated and saved as 'prescription.pdf'.
 
-if setting == "reg":
-    # Regression prescription: continuous outcomes
-    graph.prescription_graph_reg(
-        f, X_train, y_train, X_pres, y_pres,
-        cfg["cost"], k, ylim=cfg["ylim"]
-    )
-else:
-    # Classification prescription: categorical outcomes
-    graph.prescription_graph_cls(
-        f, X_train, y_train, X_pres, y_pres,
-        cfg["cost"], k, ylim=cfg["ylim"],
-        accuracy_lim=cfg["accuracy_lim"]
-    )
 
-plt.savefig("prescription.pdf", dpi=600)
-plt.close()

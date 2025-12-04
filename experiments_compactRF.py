@@ -1,6 +1,6 @@
 """
 Main script to perform the prescriptive modality selection using a Random Forest (RF) 
-with customized Decision Tree Structures (DTS) as predictive model. 
+with customized Decision Tree Structures (DTs) as predictive model. 
 The script performs both the training phase and the prescriptive analysis.
 """
 
@@ -16,13 +16,13 @@ import matplotlib.pyplot as plt              # Plotting library
 # ============================================================
 
 # Dataset and scenario selection
-dataset = "synthetic_heterogeneous"  # Dataset identifier (see presets for available options)
-scenario = "4"                       # Scenario ID within the dataset
-setting = "reg"                      # Task type: "reg" = regression, "cls" = classification
+dataset = "wine"  # Dataset identifier (see presets for available options)
+scenario = "6"                       # Scenario ID within the dataset
+setting = "cls"                      # Task type: "reg" = regression, "cls" = classification
 
 # Prescription parameters
-k = 1                                 # Number of neighbors used to estimate the individualized prediction error
-nc = 1.1                              # Fraction of total modality-combinations considered in the prescription resolution
+k = 1                             # Number of neighbors used to estimate the individualized prediction error
+nc = 1.1                            # Fraction of total modality-combinations considered in the prescription resolution
 
 # ------------------------------------------------------------
 # Load configuration preset from the predefined settings.
@@ -59,9 +59,8 @@ X_train, y_train, X_pres, y_pres, modalities = get_dataset(dataset, scenario, se
 #   tree_depth       : maximum depth of each tree
 #   random_state     : for reproducibility
 f = compactRF(
-    100, X_train.shape[0], modalities, setting,
-    cfg["impurity"], cfg["tree_depth"], random_state=42
-)
+     100, X_train.shape[0], modalities, setting,
+     cfg["impurity"], cfg["tree_depth"], random_state=42 )
 
 
 # ============================================================
@@ -78,11 +77,14 @@ print('Total time to fit the compact RF:', T_total, 'minutes')
 # ============================================================
 #                   PRESCRIPTIVE ANALYSIS
 # ============================================================
-
-# The prescription phase evaluates the local and global prescription
-# under both regression and classification contexts.
-# It produces the main prescription plot and saves it as 'prescription.pdf'.
-t1_k1 = time.time()
+# Generate two heatmaps for the selection:
+#   - Local prescription
+#   - Global prescription
+# The heatmaps are saved as 'hm_comparison.pdf'.
+# Optionally, the selection can be segmented for subpopulations.
+# The prediction phase evaluates both local and global prescriptions
+# for regression and classification tasks.
+# The prediction plot is generated and saved as 'prescription.pdf'.
 
 if setting == "reg":
     # Regression prescription: continuous outcomes
@@ -101,37 +103,15 @@ else:
 plt.savefig("prescription.pdf", dpi=600)
 plt.close()
 
-t2_k1 = time.time()
-T_total_k1 = (t2_k1 - t1_k1) / 60
-print('Total time to evaluate prescription:', T_total_k1, 'minutes')
 
-
-# ============================================================
-#                   HEATMAP COMPARISON VISUALIZATION
-# ============================================================
-
-# Two heatmaps are generated:
-#   - Local prescription
-#   - Global prescription
-# The output is saved as 'hm_comparison.pdf'.
+#=================================================================
+#                 Modality Importance Calculation
+#=================================================================
+# Computes the modality importance according to the criterion defined
 #
-# The function 'heat_map_graph' includes the argument 'selected_indices', 
-# which can receive a set of indices to represent heatmaps 
-# for the corresponding individuals in the prescriptive set.
+# To generate the plot, run:
+#     f.modality_importance()
+#
+# The resulting figure will be saved as 'modality_importance.pdf'.
 
-fig, axes = plt.subplots(2, 1, figsize=(10.5, 7), constrained_layout=True)
 
-graph.heat_map_graph(
-    X_train, X_pres, cfg["cost"], f, graph.heat_map,
-    k, universal=False, title='Local prescription',
-    annotate=True, ax=axes[0]
-)
-
-graph.heat_map_graph(
-    X_train, X_pres, cfg["cost"], f, graph.heat_map,
-    k, universal=True, title='Global prescription',
-    annotate=True, ax=axes[1]
-)
-
-plt.savefig("hm_comparison.pdf", dpi=600)
-plt.close()

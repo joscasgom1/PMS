@@ -47,24 +47,13 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         correlation_matrix = np.eye(total_features)
 
 
-
-        intra_block_corr = (0.4, 0.6)  
-        inter_block_corr = (0, 0.2)  
+        rho = 0.6
 
 
-        for i in range(n_blocks):
-            for j in range(n_features_per_block):
-                for k in range(n_features_per_block):
-                    if j != k:
-                        correlation_matrix[i*n_features_per_block + j, i*n_features_per_block + k] = np.random.uniform(*intra_block_corr)
-
-
-        for i in range(n_blocks):
-            for j in range(i+1, n_blocks):
-                for k in range(n_features_per_block):
-                    for l in range(n_features_per_block):
-                        correlation_matrix[i*n_features_per_block + k, j*n_features_per_block + l] = np.random.uniform(*inter_block_corr)
-                        correlation_matrix[j*n_features_per_block + l, i*n_features_per_block + k] = correlation_matrix[i*n_features_per_block + k, j*n_features_per_block + l]
+        covariance_matrix = np.zeros((total_features, total_features))
+        for j in range(total_features):
+            for t in range(total_features):
+                covariance_matrix[j, t] = rho ** abs(j - t)
 
 
         covariance_matrix = correlation_matrix  
@@ -108,29 +97,21 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         n_samples_per_pop = 1000  
         n_samples = 2 * n_samples_per_pop  
     
-    
-        correlation_matrix = np.eye(total_features)
-        intra_block_corr = (0.4, 0.6)
-        intra_block_corr_B = (0.6,0.8)
-        inter_block_corr = (0.0, 0.2)
+
     
         SEED = 42
         np.random.seed(SEED)
     
-    
-        for i in range(n_blocks):
-            for j in range(n_features_per_block):
-                for k in range(n_features_per_block):
-                    if j != k:
-                        correlation_matrix[i * n_features_per_block + j, i * n_features_per_block + k] = np.random.uniform(*intra_block_corr)
-    
-        for i in range(n_blocks):
-            for j in range(i + 1, n_blocks):
-                for k in range(n_features_per_block):
-                    for l in range(n_features_per_block):
-                        val = np.random.uniform(*inter_block_corr)
-                        correlation_matrix[i * n_features_per_block + k, j * n_features_per_block + l] = val
-                        correlation_matrix[j * n_features_per_block + l, i * n_features_per_block + k] = val
+        correlation_matrix = np.eye(total_features)
+
+
+        rho = 0.6
+
+
+        covariance_matrix = np.zeros((total_features, total_features))
+        for j in range(total_features):
+            for t in range(total_features):
+                covariance_matrix[j, t] = rho ** abs(j - t)
     
         # We define different means and covariances for each population
         mean_A = np.zeros(total_features)   # Population A with mean 0
@@ -138,17 +119,9 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         mean_B = mean_B + 2  # Population B with higher mean
     
     
-        # Correlation matrix for subpopulation B
-        correlation_matrix_B = np.copy(correlation_matrix)
-        for i in range(n_blocks):
-            for j in range(n_features_per_block):
-                for k in range(n_features_per_block):
-                    if j != k:
-                        correlation_matrix_B[i * n_features_per_block + j, i * n_features_per_block + k] = np.random.uniform(*intra_block_corr_B)
-    
         # Features within each subpopulation
-        X_A = np.random.multivariate_normal(mean_A, correlation_matrix, size=n_samples_per_pop)
-        X_B = np.random.multivariate_normal(mean_B, correlation_matrix_B, size=n_samples_per_pop)
+        X_A = np.random.multivariate_normal(mean_A, covariance_matrix, size=n_samples_per_pop)
+        X_B = np.random.multivariate_normal(mean_B, covariance_matrix, size=n_samples_per_pop)
     
         # Complete training set
         X = np.vstack([X_A, X_B])
@@ -218,11 +191,11 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         threshold_B = median_B if is_classification else None
         scenarios = {
             "4": [
-                {"mean": mean_A, "cov": correlation_matrix, "weights": weights_A, "size": 200, "threshold": threshold_A}
+                {"mean": mean_A, "cov": covariance_matrix, "weights": weights_A, "size": 200, "threshold": threshold_A}
             ],
             "5": [
-                {"mean": mean_A, "cov": correlation_matrix, "weights": weights_A, "size": 100, "threshold": threshold_A},
-                {"mean": mean_B, "cov": correlation_matrix_B, "weights": weights_B, "size": 100, "threshold": threshold_B}
+                {"mean": mean_A, "cov": covariance_matrix, "weights": weights_A, "size": 100, "threshold": threshold_A},
+                {"mean": mean_B, "cov": covariance_matrix, "weights": weights_B, "size": 100, "threshold": threshold_B}
             ]
         }
         
@@ -300,7 +273,7 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         
         # ------------------- Split into training and prescriptive sets -------------------
         X_train_raw, X_pres_raw, y_train, y_pres = train_test_split(
-            X_raw, y, test_size=0.2, random_state=42
+            X_raw, y, test_size=0.1, random_state=42
         )
         
         # ------------------- One-Hot Encoding -------------------
@@ -332,46 +305,47 @@ presets = {
     "synthetic_homogeneous": {
         "scenarios": {
             "1": {
-                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (80,350)},
-                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,70), "accuracy_lim": (0.7,0.85)}
+                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (130,350)},
+                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (35,90), "accuracy_lim": (0.7,0.9)}
             },
             "2": {
-                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (80,480)},
-                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,100), "accuracy_lim": (0.65,0.85)}
+                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (100,450)},
+                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,90), "accuracy_lim": (0.65,0.9)}
             },
             "3": {
-                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (80,550)},
-                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (10,80), "accuracy_lim": (0.65,0.9)}
+                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (100,500)},
+                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,100), "accuracy_lim": (0.63,0.85)}
             }
         }
     },
     "synthetic_heterogeneous": {
         "scenarios": {
             "4": {
-                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (150,900)},
-                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,90), "accuracy_lim": (0.65,0.9)}
+                "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (130,800)},
+                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,90), "accuracy_lim": (0.72,0.87)}
             },
             "5": {
                 "reg":  {"impurity":"mse","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (150,920)},
-                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,90), "accuracy_lim": (0.65,0.9)}
+                "cls":  {"impurity":"gini","tree_depth": 10, "cost": range(0, 601, 50), "ylim": (20,90), "accuracy_lim": (0.68,0.87)}
             }
         }
     },
     "wine": {
         "scenarios": {
             "6": {
-                "reg": {"impurity":"mse","tree_depth": 6, "cost": range(0, 4001, 250), "ylim": (150,470)},
-                "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 4001, 250), "ylim": (0,220), "accuracy_lim": (0.64,0.77)}
+                "reg": {"impurity":"mse","tree_depth": 6, "cost": range(0, 6501, 250), "ylim": (150,470)},
+                "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 6501, 250), "ylim": (0,220), "accuracy_lim": (0.64,0.77)}
             }
         }
     },
     "bikesharing": {
         "scenarios": {
             "7": {
-                "reg": {"impurity":"mse","tree_depth": 10, "cost": range(0, 10451, 750), "ylim": (60000,180000)},
-                "cls": {"impurity":"gini","tree_depth": 10, "cost": range(0, 10451, 750), "ylim": (130,450), "accuracy_lim": (0.9,0.94)}
+                "reg": {"impurity":"mse","tree_depth": 6, "cost": range(0, 5451, 300), "ylim": (80000,140000)},
+                "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 5451, 300), "ylim": (40,120), "accuracy_lim": (0.84,0.9)}
             }
         }
     }
 }
+
 
