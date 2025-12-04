@@ -10,11 +10,13 @@ from .Optimization import _BMOptimization
 from .Optimization_universal import _BMOptimization_universal
 import heapq
 import random
-
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+import math 
+import time
 
 Modality = namedtuple('Modality', ['features','CV','CF', 'id'])
 
-class extendedRF:
+class extendedRFscikit:
     def __init__(self, n_trees, n_bs, modalities,tree = 'cls',criterion='gini', max_depth=5, replacement = True, random_state = None):
         """
         Initialization of a Classic Random Forest instance:
@@ -59,10 +61,7 @@ class extendedRF:
         """
         Fitting of a Customized Random Forest model
         """
-        if self.random_state:
-            np.random.seed(self.random_state)
-            random.seed(self.random_state)
-            
+          
         trees, OOB = [], []
         self.ch_feat = [i for i in range(X.shape[1]) if i not in self.total_exp_features]
         
@@ -73,24 +72,29 @@ class extendedRF:
         self.cat_comb(self.ch_feat,self.m_comb)
         
         # A possible random forest for each possible combination
-        
-        classic_forests = []
-        total_oob = []
-        for comb in self.f_comb:
-            X_comb = X[:,comb].copy()
-            trees, OOB = [], []
+        if self.tree == 'cls':
+            t1 = time.time()
+            classic_forests = []
+            for comb in self.f_comb:
+                X_comb = X[:,comb].copy()
+                rf = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42, max_features = "sqrt")
+                rf.fit(X_comb,y)
+                classic_forests.append(rf)
+            t2 = time.time()
+            print('time to fit:', t2-t1)
+            self.classic_rf = classic_forests
+        else: 
+            t1 = time.time()
+            classic_forests = []
+            for comb in self.f_comb:
+                X_comb = X[:,comb].copy()
+                rf = RandomForestRegressor(n_estimators=100, max_depth=6, random_state=42, max_features = 0.3)
+                rf.fit(X_comb,y)
+                classic_forests.append(rf)
+            t2 = time.time()
+            print('time to fit:', t2-t1)
+            self.classic_rf = classic_forests
 
-            for _ in range(self.n_trees):
-                indices, Xb, yb = self._bagging(X_comb, y, self.n_bs)
-                tree = BM_Tree(tree=self.tree, criterion=self.criterion,  max_depth=self.max_depth, 
-                                modalities=[])
-                tree.fit(Xb, yb)
-                trees.append(tree)
-                OOB.append(indices)                                  
-            classic_forests.append(trees)
-            total_oob.append(OOB)
-        self.classic_rf = classic_forests
-        self.t_oob = total_oob
         
     
     def _precompute_oob_mapping(self):
@@ -195,13 +199,13 @@ class extendedRF:
         for i in range(l):
             if self.tree=='cls':
                 X_t = X.copy()
-                #prediction_comb[:,i] = self.predict_OOB(X_t,i)
+                prediction_comb[:,i] = self.predict_OOB(X_t,i)
                 error_comb[:,i] =  1-self.prob_class_OOB(X_t,i,y)
             else:
                 X_t = X.copy()
                 prediction_comb[:,i] = self.predict_OOB(X_t,i)
                 error_comb[:,i] = np.abs(prediction_comb[:,i]-y)
-        #self.BM_train_estimation = prediction_comb
+        self.BM_train_estimation = prediction_comb
         self.BM_train_error = error_comb      
         
     def _terminal_leaf_OOB(self, X):

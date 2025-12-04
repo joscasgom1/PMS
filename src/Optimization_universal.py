@@ -1,62 +1,97 @@
 import gurobipy as gp
 from gurobipy import GRB
+import time
 
-def _BMOptimization_universal(error_universal, costs_v, costs_f, budget, cat, cat_combination,n):
+def _BMOptimization_universal(error_universal, costs_v, costs_f, budgets, cat, cat_combination, n):
     """
-    Function to solve the selection of modalities. 
-    Parameters:
-        - error_universal: matrix with estimation for prediction errors
-        - budget : Maximum budget allowed
-        - costs_v : variable cost for each Supplementeary Modality
-        - cost_f : fixed cost for each Supplementary Modality
-        - mod: set of Supplementary Modalities
-        - mod_combination: combination of Supplementary Modalities to be considered
-        - n: size of prescriptive set
-    
-    Returns:
-        - Selection of Modalities for each individual
-        - Total budget spent
-        - Total real error
+    Universal prescriptive selection with multiple budgets.
     """
-    m = gp.Model('gol')
+
+    feature_selection_list = []
+    total_cost_list = []
+    total_error_list = []
+    time_list = []
+
     nc = len(error_universal)
     ncat = len(cat)
-    pi = {}
-    pi= m.addVars(range(nc),vtype=GRB.INTEGER, lb=0, ub=n, name='pi')
-    
-    
+
+    # --- Build model ONCE ---
+    t1 = time.time()
+    m = gp.Model('gol')
+    m.setParam('OutputFlag', 0)
+
+    # Variables
+    pi = m.addVars(range(nc), vtype=GRB.INTEGER, lb=0, ub=n, name='pi')
     Gamma = m.addVars(range(ncat), vtype=GRB.BINARY, name='Gamma')
-    
-    # n variables seleccionadas
-    m.addConstr(gp.quicksum(pi[j] for j in range(nc)) == n, name="sum_pi_col")
-        
-    m.addConstr(gp.quicksum(costs_v[j] * pi[j] for j in range(nc)) + gp.quicksum(Gamma[j] * costs_f[j] for j in range(ncat)) <= budget, name="sum_Budget_total")        
-    
+
+    # Exactly n items selected (sum of counts = n)
+    m.addConstr(gp.quicksum(pi[j] for j in range(nc)) == n)
+
+    # Linking constraints
     for k in range(ncat):
         for j in range(nc):
             if cat[k] in cat_combination[j]:
-                m.addConstr(pi[j] <= n*Gamma[k], name="Fixed_costs")
-    
-    m.setObjective(gp.quicksum(pi[j] * error_universal[j] for j in range(nc)), sense=GRB.MINIMIZE)
-    
-    m.setParam('OutputFlag', 0)
-    m.optimize()
-    
-    if m.status == GRB.OPTIMAL:
-        feature_selection = []        
-        for j in range(nc):
-            if pi[j].x > 0.9:
-                for _ in range(int(pi[j].x)):
+                m.addConstr(pi[j] <= n * Gamma[k])
+
+    # Create budget constraint with dummy RHS (0)
+    budget_expr = (
+        gp.quicksum(costs_v[j] * pi[j] for j in range(nc))
+        + gp.quicksum(costs_f[k] * Gamma[k] for k in range(ncat))
+    )
+    budget_constr = m.addConstr(budget_expr <= 0.0, name="Budget_dynamic")
+
+    # Objective
+    m.setObjective(
+        gp.quicksum(pi[j] * error_universal[j] for j in range(nc)),
+        GRB.MINIMIZE
+    )
+
+    t2 = time.time()
+
+    # --- Solve for each budget ---
+    for budget in budgets:
+
+        # Update RHS
+        budget_constr.RHS = budget
+
+
+        m.reset()
+
+        t_start = time.time()
+        m.optimize()
+        t_opt = time.time()
+
+        if m.status == GRB.OPTIMAL:
+
+            # Expand pi[j] selections
+            feature_selection = []
+            for j in range(nc):
+                cnt = int(round(pi[j].X))
+                for _ in range(cnt):
                     feature_selection.append(j)
 
-        total_cost = (
-        sum(costs_v[j] * pi[j].X for j in range(nc))+
-        sum(Gamma[j].X * costs_f[j] for j in range(ncat))        
-    )
-        total_error = m.ObjVal
+            total_cost = (
+                sum(costs_v[j] * pi[j].X for j in range(nc)) +
+                sum(costs_f[k] * Gamma[k].X for k in range(ncat))
+            )
 
-        return feature_selection, total_cost, total_error
-    else:
-        print('Optimal solution not found')
-    
+            feature_selection_list.append(feature_selection)
+            total_cost_list.append(total_cost)
+            total_error_list.append(m.ObjVal)
+            time_list.append((t_opt - t_start, t2 - t1))
+
+        else:
+            print(f"Optimal solution not found for budget {budget}.")
+            feature_selection_list.append(None)
+            total_cost_list.append(None)
+            total_error_list.append(None)
+            time_list.append(None)
+
     m.dispose()
+
+    return (
+        feature_selection_list,
+        total_cost_list,
+        total_error_list,
+        time_list
+    )

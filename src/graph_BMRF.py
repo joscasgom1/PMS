@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import random
 import pandas as pd
 import seaborn as sns
+import time
 
 def global_prescription(f, X, y, X2, y2, cost, seed = 42):
     """
@@ -24,10 +25,9 @@ def global_prescription(f, X, y, X2, y2, cost, seed = 42):
     real_cost = []
     error = []
     real_error = []
-
-    for c in cost:
-        f.BMOptimization_universal(c, X2.shape[0])
-
+    f.BMOptimization_universal(cost, X2.shape[0])
+    
+    for c in range(len(cost)):
         """
         The result of the global prescription dependes on the selection made.
         In order to mitigate this effect, the result is averaged across 5 posible
@@ -38,6 +38,8 @@ def global_prescription(f, X, y, X2, y2, cost, seed = 42):
             p = np.random.permutation(X2.shape[0])
             Xc = X2[p].copy()
             yc = y2[p].copy()
+            for i in range(len(f.feature_selection[c])):
+                Xc[i, f.null_feat[f.feature_selection[c][i]]] = np.nan
             r.append(f.actualError(Xc, yc))
 
         real_cost.append(f.total_cost)
@@ -56,31 +58,29 @@ def k_prescription(f, X, y, X2, y2, cost):
         X2, y2: Prescriptive data
         k: number of neighbors used to estimate the prediction error
         costs: Allowed budget values for which the prescription problem is solved
-        xlim: tuple (xmin, xmax) for x-axis limits
-        ylim: tuple (ymin, ymax) for y-axis limits
-        ncomb: fraction indicating the threshold for importance in the modality combinations considered during prescription.
     """
 
     real_cost = []
     error = []
     real_error = []
-  
-
-    for c in cost:
-        f.BMOptimization(c)
-        
-        Xc = X2.copy()
-        for i in range(len(f.feature_selection)):
-            Xc[i, f.null_feat[f.feature_selection[i]]] = np.nan
-
-        
-        real_cost.append(f.total_cost)
-        error.append(f.total_error)
-        real_error.append(f.actualError(X2, y2))
+    times = []
     
-    return real_error, error, cost
+    f.BMOptimization(cost)
 
-def prescription_graph_reg(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None, ncomb=1, seed = 42):
+    for c in range(len(cost)):
+        Xc = X2.copy()
+        for i in range(len(f.feature_selection[c])):
+            Xc[i, f.null_feat[f.feature_selection[c][i]]] = np.nan
+        
+        real_cost.append(f.total_cost[c])
+        error.append(f.total_error[c])
+        real_error.append(f.actualError(Xc, y2))
+        
+    times.append(f.times)
+    return real_error, error, cost, times
+
+def prescription_graph_reg(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None, selected_indices=None, ncomb=1, seed = 42):
+    print('llamada')
     """
     Runs the full prescription evaluation pipeline:
     - Precomputes OOB info
@@ -101,21 +101,40 @@ def prescription_graph_reg(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None, n
     """
 
     f._precompute_oob_mapping()
+    t_1_estimate = time.time()
     f.error_estimation_oob(X, y, ncomb)
-    f._error_estimation_RFbased(X, X2, k)
-    f.cat_comb_importance()
+    t_2_estimate = time.time()
+    print('Error train estimate:',t_2_estimate-t_1_estimate)
+    f._error_estimation_RFbased(X, X2, k)    
+    
     
     """
     Local prescription evaluation
     """
-    k_re, k_e, k_cost = k_prescription(f, X, y, X2, y2, cost)
-    
-    
+
+    k_re, k_e, k_cost, k_t = k_prescription(f, X, y, X2, y2, cost)
+    print('prescription times:',k_t)
+    d1 = heatmap_calculate_local(f, cost)
+    if selected_indices is not None:
+        l_selection = []
+        for ind in selected_indices:
+            l_selection.append(heatmap_calculate_local(f, cost,selected_indices=ind))
     """
     Global prescription evaluation
     """
-    g_re, g_e, g_cost = global_prescription(f, X, y, X2, y2, cost, seed = seed)
     
+    g_re, g_e, g_cost = global_prescription(f, X, y, X2, y2, cost, seed = seed)
+    d2 = heatmap_calculate_global(f, cost)
+    if selected_indices is not None:
+        g_selection = []
+        for ind in selected_indices:
+            g_selection.append(heatmap_calculate_global(f, cost,selected_indices=ind))
+   
+    plot_two_heatmaps(d1, d2, cost, title1="Local prescription", title2="Global prescription", annotate=True)
+    
+    if selected_indices is not None:
+        for i in range(len(selected_indices)):
+            plot_two_heatmaps(l_selection[i], g_selection[i], cost, title1="Local prescription", title2="Global prescription", annotate=True, save_index=i)
     
     """
     Reference error
@@ -151,7 +170,7 @@ def prescription_graph_reg(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None, n
     
 
 
-def prescription_graph_cls(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None,accuracy_lim =None, ncomb=1, seed = 42):
+def prescription_graph_cls(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None,accuracy_lim =None,selected_indices=None, ncomb=1, seed = 42):
     """
     Runs the full prescription evaluation pipeline:
     - Precomputes OOB info
@@ -172,20 +191,39 @@ def prescription_graph_cls(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None,ac
     """
 
     f._precompute_oob_mapping()
+    t_1_estimate = time.time()
     f.error_estimation_oob(X, y, ncomb)
+    t_2_estimate = time.time()
+    print('Error train estimate:',t_2_estimate-t_1_estimate)
     f._error_estimation_RFbased(X, X2, k)
     f.cat_comb_importance()
     
     """
     Local prescription evaluation
     """
-    k_re, k_e, k_cost = k_prescription(f, X, y, X2, y2, cost)
-    
-    
+    k_re, k_e, k_cost, k_t = k_prescription(f, X, y, X2, y2, cost)
+    print('prescription times:',k_t)
+    d1 = heatmap_calculate_local(f, cost)
+    if selected_indices is not None:
+        l_selection = []
+        for ind in selected_indices:
+            l_selection.append(heatmap_calculate_local(f, cost,selected_indices=ind))
     """
     Global prescription evaluation
     """
+    
     g_re, g_e, g_cost = global_prescription(f, X, y, X2, y2, cost, seed = seed)
+    d2 = heatmap_calculate_global(f, cost)
+    if selected_indices is not None:
+        g_selection = []
+        for ind in selected_indices:
+            g_selection.append(heatmap_calculate_global(f, cost,selected_indices=ind))
+   
+    plot_two_heatmaps(d1, d2, cost, title1="Local prescription", title2="Global prescription", annotate=True)
+    
+    if selected_indices is not None:
+        for i in range(len(selected_indices)):
+            plot_two_heatmaps(l_selection[i], g_selection[i], cost, title1="Local prescription", title2="Global prescription", annotate=True, save_index=i)
     
     
     """
@@ -220,114 +258,6 @@ def prescription_graph_cls(f, X, y, X2, y2, cost, k = 1, xlim=None, ylim=None,ac
     if accuracy_lim:
         ax2.set_ylim(accuracy_lim)
 
-    
-    
-def heat_map(rf, B, selected_indices=None, universal=False, n = None,regularize = False, p = None):
-    """
-   Calculates the normalized proportion of selected modalities for a given budget B.
-
-Args:
-    - rf: Instance of the customized Random Forest model.
-    - B (int/float): Budget for the optimization.
-    - modalities (list/dict): Considered modalities.
-    - k : number of neighbours used to estimate the prediction error
-    - selected_indices (list, optional): Feature indices to filter.
-    - universal: Boolean that indicates is the prescription is done with the 
-                Universal prescription. False by default.
-    - n: individuals in the prescriptive set
-
-Returns:
-    dict: Dictionary with the proportion of presence for each modality.
-    """
-    
-
-    if universal:
-        rf.BMOptimization_universal(B, n)
-        
-        all_counts = []
-
-        for _ in range(5):
-            # Permute the feature list
-            permuted = random.sample(rf.feature_selection, len(rf.feature_selection))
-
-            # Apply selection AFTER permutation
-            if selected_indices is not None:
-                permuted = [permuted[i] for i in selected_indices]
-
-            count = {mod.id: 0 for mod in rf.modalities}
-            for f in permuted:
-                for mod in rf.cat_combination[f]:
-                    count[mod] += 1
-
-            # Normalize for this permutation
-            n_feats = len(permuted)
-            norm_count = {k: v / n_feats for k, v in count.items()}
-            all_counts.append(norm_count)
-            
-        # Average over all normalized counts
-        averaged_count = {
-            mod.id: np.mean([d[mod.id] for d in all_counts]) for mod in rf.modalities
-        }
-        return averaged_count
-
-    else:
-        rf.BMOptimization(B)
-        # No permutation, use features directly
-        features = rf.feature_selection
-        if selected_indices is not None:
-            features = [features[i] for i in selected_indices]
-
-        n_feats = len(features)
-        count = {mod.id: 0 for mod in rf.modalities}
-        for f in features:
-            for mod in rf.cat_combination[f]:
-                count[mod] += 1
-
-        count = {k: v / n_feats for k, v in count.items()}
-        return count
-    
-def heat_map_graph(X,X2,cost, rf, fdic, k,universal = False, title='', selected_indices=None, annotate=False, ax = None):
-    """
-    Generates a heatmap showing the relative importance of modalities
-for different budget values (valores_B).
-
-Args:
-    - X: train set
-    - X2 : prescriptive set
-    - valores_B (list): List of budget values to evaluate.
-    - rf: Instance of the customized Random Forest model.
-    - modalities (list/dict): Set or list of considered modalities.
-    - fdic (func): Function that receives (rf, B, modalities, selected_indices)
-                               and returns a dictionary {modality: normalized value}.
-    - k : number of neighbours used to estimate the prediction error
-    - title (str, optional): Title for the plot.
-    - selected_indices (list, optional): List of indices to filter selected features.
-    - annotate: Boolean to display values in each cell (default False).
-    - universal: Boolean that indicates is the prescription is done with the 
-                Universal prescription. False by default.
-    - regularize: Boolean that indicates is the heatmap in the universal prescription needs to bea averaged
-                  across different possible selections
-    - p: parameter indicating how many selections are chosen to average the results
-Returns:
-    None: Displays the heatmap using seaborn.
-    """
-    rf._error_estimation_RFbased(X, X2, k)
-    data = {}
-
-    for B in cost:
-        diccionario = fdic(rf, B, selected_indices, universal, n=X2.shape[0])
-        data[B] = diccionario
-
-    df = pd.DataFrame(data).sort_index()
-    df.index = [f"M{i}" for i in df.index]
-
-    # It creates a subplot is none is defined
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10.5, 3.5))
-
-    sns.heatmap(df, annot=annotate, fmt=".3f", cmap="Greys", vmin=0, vmax=1, ax=ax)
-    ax.set_title(title)
-    ax.set_xlabel("Budget")
 
 
 
@@ -385,3 +315,81 @@ def importance(rf):
     plt.gca().invert_yaxis()  
     plt.tight_layout()
     plt.show()
+    
+def heatmap_calculate_local(f,costs,selected_indices = None):
+    data_local = {}
+    for c in range(len(costs)):
+        features = f.feature_selection[c]
+        if selected_indices is not None:
+            features = [features[i] for i in selected_indices]
+        n_feats = len(features)
+        count = {mod.id: 0 for mod in f.modalities}
+        for feat in features:
+            for mod in f.cat_combination[feat]:
+                count[mod] += 1
+        count = {k: v / n_feats for k, v in count.items()}
+        data_local[c] = count
+    return data_local    
+
+
+def heatmap_calculate_global(f,costs,selected_indices = None):
+    data_global = {}
+    
+    for c in range(len(costs)):
+        all_counts = []
+        for _ in range(5):
+            # Permute the feature list
+            permuted = random.sample(f.feature_selection[c], len(f.feature_selection[c]))    
+            # Apply selection AFTER permutation
+            if selected_indices is not None:
+                permuted = [permuted[i] for i in selected_indices]    
+            count = {mod.id: 0 for mod in f.modalities}
+            for perm in permuted:
+                for mod in f.cat_combination[perm]:
+                    count[mod] += 1
+    
+
+            n_feats = len(permuted)
+            norm_count = {k: v / n_feats for k, v in count.items()}
+            all_counts.append(norm_count)
+            
+        # Average over all normalized counts
+        averaged_count = {
+            mod.id: np.mean([d[mod.id] for d in all_counts]) for mod in f.modalities
+        }
+        data_global[c] = averaged_count
+    return data_global
+
+def plot_two_heatmaps(data1, data2, costs, title1="Local prescription", title2="Global prescription", annotate=True, save_index=None):
+    
+
+    df1 = pd.DataFrame(data1).sort_index()
+    df2 = pd.DataFrame(data2).sort_index()
+    
+    
+    df1.index = [f"M{i}" for i in df1.index]
+    df2.index = [f"M{i}" for i in df2.index]
+
+    df1.columns = costs
+    df2.columns = costs
+    # Create figure with two subplots 
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10.5, 7), constrained_layout=True)
+
+    # Upper heatmap
+    sns.heatmap(df1, annot=annotate, fmt=".3f", cmap="Greys",
+                vmin=0, vmax=1, ax=ax1)
+    ax1.set_title(title1)
+    ax1.set_xlabel("Budget")
+
+    # Lower heatmap
+    sns.heatmap(df2, annot=annotate, fmt=".3f", cmap="Greys",
+                vmin=0, vmax=1, ax=ax2)
+    ax2.set_title(title2)
+    ax2.set_xlabel("Budget")
+    if save_index is None:
+        save_path = "hm_comparison.pdf"
+    else:
+        save_path = f"hm_comparison_{save_index}.pdf"
+    # Save and close exactly como antes
+    plt.savefig(save_path, dpi=600)
+    plt.close()

@@ -172,13 +172,13 @@ class compactRF:
         for i in range(l):
             if self.tree=='cls':
                 X_t = X.copy(); X_t[:,self.null_feat[i]] = np.nan
-                prediction_comb[:,i] = self.predict_OOB(X_t)
+                # prediction_comb[:,i] = self.predict_OOB(X_t)
                 error_comb[:,i] =  1-self.prob_class_OOB(X_t,y)
             else:
                 X_t = X.copy(); X_t[:,self.null_feat[i]] = np.nan
                 prediction_comb[:,i] = self.predict_OOB(X_t)
                 error_comb[:,i] = np.abs(prediction_comb[:,i]-y)
-        self.BM_train_estimation = prediction_comb
+        #self.BM_train_estimation = prediction_comb
         self.BM_train_error = error_comb
         
     def _error_estimation_test(self,X_train,X_test):
@@ -193,20 +193,20 @@ class compactRF:
         Resolution of the selection of modalities.
         
         Parameters:
-            - Budget: Maximum budget available
+            - Budget: List of maximum budgets available
         """
         CV = [sum(c.CV for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
         self.Cost_V = CV
         self.distinct_cat = sorted({x for sublista in self.cat_combination for x in sublista})
         self.CF_unique = [sum(c.CF for c in self.modalities if c.id == i) for i in self.distinct_cat]
-        self.feature_selection, self.total_cost, self.total_error = _BMOptimization(self.error_estimation_test, CV, self.CF_unique, Budget, self.distinct_cat,self.cat_combination)
+        self.feature_selection, self.total_cost, self.total_error, self.times = _BMOptimization(self.error_estimation_test, CV, self.CF_unique, Budget, self.distinct_cat,self.cat_combination)
    
     def BMOptimization_universal(self,Budget,n):
         """
         Resolution of the selection of modalities for the Universal Prescription
         
         Parameters:
-            - Budget: Maximum budget available
+            - Budget: List of maximum budgets available
         """
         CV = [sum(c.CV for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
         CF = [sum(c.CF for c in self.modalities if c.id in i) if len(i) > 0 else 0 for i in self.cat_combination]
@@ -214,8 +214,7 @@ class compactRF:
         self.distinct_cat = sorted({x for sublista in self.cat_combination for x in sublista})
         self.CF_unique = [sum(c.CF for c in self.modalities if c.id == i) for i in self.distinct_cat]
         universal_error = np.mean(self.BM_train_error, axis = 0)
-
-        self.feature_selection, self.total_cost, self.total_error = _BMOptimization_universal(universal_error, CV, self.CF_unique, Budget, self.distinct_cat,self.cat_combination,n)
+        self.feature_selection, self.total_cost, self.total_error, self.times = _BMOptimization_universal(universal_error, CV, self.CF_unique, Budget, self.distinct_cat,self.cat_combination,n)
     
     
     def FeatureSelecion(self,X_train,X_test,y_train,B):
@@ -231,10 +230,7 @@ class compactRF:
         """
         Calculation of the prediction error
         """
-        Xc = X.copy()
-        for i, feat_idx in enumerate(self.feature_selection):
-            Xc[i, self.null_feat[feat_idx]] = np.nan
-        yp = self.predictRF(Xc);
+        yp = self.predictRF(X);
         return np.mean(yp==y) if self.tree == 'cls' else np.sum(np.abs(yp-y))
     
     def _terminal_leaf_OOB(self, X):
