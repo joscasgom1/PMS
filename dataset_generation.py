@@ -3,7 +3,7 @@ from collections import namedtuple
 
 Modality = namedtuple('Modality', ['features', 'CV','CF','id'])
 
-def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
+def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42, weights_seed=None):
     
     """
     Return train and prescriptive dataset
@@ -17,7 +17,9 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
     setting : str
        'reg' for regression, 'cls' for classification.
     seed : int
-        Seed for reproducibility.
+        Seed for reproducibility of samples and noise.
+    weights_seed : int, optional
+        Seed for reproducibility of model structure (betas). If None, it uses 'seed'.
 
     Return:
         X_train : np.array
@@ -26,7 +28,7 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         y_pres : np.array
     """
     import numpy as np
-    np.random.seed(42)
+    np.random.seed(seed)
 
     # ==== Synthetic Homogeneous ====
     if dataset_name == "synthetic_homogeneous":
@@ -99,15 +101,25 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
     
 
     
-        SEED = 42
-        np.random.seed(SEED)
+        w_seed = weights_seed if weights_seed is not None else seed
+    
+        # 1. Structure generation (betas) - fixed by weights_seed
+        state = np.random.get_state()
+        np.random.seed(w_seed)
+        
+        # betas for each subpopulation
+        weights_A = np.zeros(total_features)  
+        weights_A[:n_features_per_block * 2] = np.random.uniform(0.5, 1.5, size=n_features_per_block * 2)
+    
+        weights_B = np.zeros(total_features)  
+        weights_B[:n_features_per_block] = np.random.uniform(0.5, 1.5, size=n_features_per_block)
+        weights_B[n_features_per_block * 2:n_features_per_block * 3] = np.random.uniform(0.5, 1.5, size=n_features_per_block)
+        
+        np.random.set_state(state) # Restore state or continue with seed
+        np.random.seed(seed)
     
         correlation_matrix = np.eye(total_features)
-
-
         rho = 0.6
-
-
         covariance_matrix = np.zeros((total_features, total_features))
         for j in range(total_features):
             for t in range(total_features):
@@ -118,7 +130,7 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         mean_B = np.zeros(total_features)
         mean_B = mean_B + 2  # Population B with higher mean
     
-    
+        # 2. Sample generation - fixed by seed
         # Features within each subpopulation
         X_A = np.random.multivariate_normal(mean_A, covariance_matrix, size=n_samples_per_pop)
         X_B = np.random.multivariate_normal(mean_B, covariance_matrix, size=n_samples_per_pop)
@@ -128,14 +140,6 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
     
         # Noise generation
         ruido = np.random.randn(n_samples)
-    
-        # betas for each subpopulation
-        weights_A = np.zeros(total_features)  
-        weights_A[:n_features_per_block * 2] = np.random.uniform(0.5, 1.5, size=n_features_per_block * 2)
-    
-        weights_B = np.zeros(total_features)  
-        weights_B[:n_features_per_block] = np.random.uniform(0.5, 1.5, size=n_features_per_block)
-        weights_B[n_features_per_block * 2:n_features_per_block * 3] = np.random.uniform(0.5, 1.5, size=n_features_per_block)
     
         # Response value for each subpopulation
         y = np.zeros(n_samples)
@@ -150,32 +154,6 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
             y[:n_samples_per_pop] = (y[:n_samples_per_pop] > median_A).astype(int)
             y[n_samples_per_pop:] = (y[n_samples_per_pop:] > median_B).astype(int)
             y = y.astype(int)
-    
-        # Graph for the features and variable response
-        plt.figure(figsize=(12, 6))
-        for i in range(4):  # 4 first features are plotted
-            plt.subplot(2, 2, i + 1)
-            plt.hist(X_A[:, i], bins=30, alpha=0.6, label="Population A")
-            plt.hist(X_B[:, i], bins=30, alpha=0.6, label="Population B")
-            #plt.title(f"Feature {i+1}")
-            plt.xlabel(fr'$X_{{{i+1}}}^{{(0)}}$', fontsize=14)
-            plt.xlim(-5,5)
-            plt.ylim(0,110)
-            plt.ylabel("Frequency")
-            plt.legend(loc='upper left')
-    
-        plt.tight_layout()
-        plt.show()
-    
-        # Response variable distribution
-        plt.figure(figsize=(8, 5))
-        plt.hist(y[:n_samples_per_pop], bins=30, alpha=0.6, label="Population A")
-        plt.hist(y[n_samples_per_pop:], bins=30, alpha=0.6, label="Population B")
-        # plt.title("Response value distribution")
-        plt.xlabel(r"$Y$", fontsize = 14)
-        plt.ylabel("Frequency")
-        plt.legend()
-        plt.show()
     
         is_classification = (setting == 'cls')
 
@@ -218,13 +196,13 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         # Load Wine dataset
         wine_quality = fetch_ucirepo(id=186)
         X = wine_quality.data.features.values
-        y = wine_quality.data.targets.values.ravel()  # Aplanar target
+        y = wine_quality.data.targets.values.ravel()  
         
-        # Convertir a clasificación si es necesario
+
         if setting == 'cls':
             y = (y > 5).astype(int)
         
-        # Dividir en entrenamiento y prescriptivo
+
         X_train, X_pres, y_train, y_pres = train_test_split(
             X, y, test_size=0.1, random_state=42
         )
@@ -242,7 +220,7 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
         modalities = [mod1,mod2,mod3,mod4,mod5,mod6,mod7,mod8,mod9,mod10]
         return X_train,y_train, X_pres,y_pres, modalities
 
-    # ==== Bikesharing (ejemplo) ====
+    # ==== Bikesharing ====
     elif dataset_name == "bikesharing":
         import pandas as pd
         import numpy as np
@@ -261,10 +239,7 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
             y = (y > np.median(y)).astype(int)
         
         # ------------------- Drop unnecessary columns -------------------
-        # Columns not relevant for learning:
-        # - 'instant': row index
-        # - 'dteday': date
-        # - 'casual', 'registered': components of the target variable
+
         cols_to_drop = ['instant', 'dteday', 'casual', 'registered']
         X_raw = X_raw.drop(columns=[col for col in cols_to_drop if col in X_raw.columns])
         
@@ -296,6 +271,29 @@ def get_dataset(dataset_name, scenario= None, setting ="reg", seed=42):
 
         return X_train,y_train, X_pres,y_pres, modalities
     
+    elif dataset_name == "nhanes_cardio":
+        import pandas as pd
+        import numpy as np
+        from sklearn.model_selection import train_test_split
+
+        df = pd.read_csv('nhanes_cardio.csv')
+
+        y = df['target'].values.astype(int)
+        feature_cols = [c for c in df.columns if c != 'target']
+        X = df[feature_cols].values.astype(float)
+
+        X_train, X_pres, y_train, y_pres = train_test_split(
+            X, y, test_size=0.1, random_state=seed, stratify=y
+        )
+
+        mod1 = Modality(features=list(range(5, 9)),   CV=30,  CF=0, id=1)
+        mod2 = Modality(features=list(range(9, 13)),  CV=100, CF=0, id=2)
+        mod3 = Modality(features=list(range(13, 15)), CV=10, CF=0, id=3)
+        modalities = [mod1, mod2, mod3]
+
+        return X_train, y_train, X_pres, y_pres, modalities
+
+
     else:
         raise ValueError(f"Dataset {dataset_name} no reconocido")
 
@@ -345,7 +343,18 @@ presets = {
                 "cls": {"impurity":"gini","tree_depth": 6, "cost": range(0, 5451, 300), "ylim": (40,120), "accuracy_lim": (0.84,0.9)}
             }
         }
+    },
+    "nhanes_cardio": {
+        "scenarios": {
+            "8": {
+                "cls": {
+                    "impurity":     "gini",
+                    "tree_depth":   6,
+                    "cost":         range(0, 29000, 2000),
+                    "ylim":         (15,60),
+                    "accuracy_lim": (0.77, 0.86)
+                }
+            }
+        }
     }
 }
-
-
